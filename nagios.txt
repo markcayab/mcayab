@@ -1,0 +1,309 @@
+STEPS ON HOW TO INSTALL NAGIOS 4.4.3 on SERVER/ Centos7/RHEL7
+
+INSTALL THE PREREQUISITES
+#yum -y install httpd php gcc glibc glibc-common wget perl gd gd-devel unzip zip
+
+CREATE NAGIOS USER AND NAGIOS GROUP
+#useradd nagios
+#groupadd nagcmd
+#usermod -a -G nagcmd nagios
+#usermod -a -G nagcmd apache
+
+INSTALL NAGIOS SERVER
+#cd /tmp/
+#wget https://assets.nagios.com/downloads/nagioscore/releases/nagios-4.4.3.tar.gz
+#tar -zxvf nagios-4.4.3.tar.gz
+#cd /tmp/nagios-4.4.3
+
+COMPILE AND INSTALL NAGIOS
+#./configure --with-nagios-group=nagios --with-command-group=nagcmd
+#make all
+#make install
+#make install-init
+#make install-config
+#make install-commandmode
+
+INSTALL NAGIOS WEB INTERFACE
+#make install-webconf
+#make install-exfoliation
+
+CREATEA USER ACCOUNT(nagiosadmin) FOR LOGGING INTO THE NAGIOS WEB INTERFACE
+#htpasswd -c /usr/local/nagios/etc/htpasswd.users nagiosadmin
+#systemctl restart httpd
+#systemctl enable httpd
+
+CONFIGURE NAGIOS SERVER EDIT THE /usr/local/nagios/etc/objects/contacts.cfg 
+#vi /usr/local/nagios/etc/objects/contacts.cfg
+----->>>Change the Email address field to receive the notification.
+
+INSTALL NAGIOS PLUGINS
+#cd /tmp
+#wget https://nagios-plugins.org/download/nagios-plugins-2.2.1.tar.gz
+#tar -zxvf nagios-plugins-2.2.1.tar.gz
+#cd /tmp/nagios-plugins-2.2.1/
+
+COMPILE AND INSTALL NAGIOS PLUGINS
+#./configure --with-nagios-user=nagios --with-nagios-group=nagios
+#make
+#make install
+
+START NAGIOS SERVER OR VERIFY THE SERVER
+#/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg
+----------> IF THERE'S NO ERROR RESTART THE NAGIOS
+
+#service nagios restart 
+#systemctl restart nagios
+
+
+SELINUX if SELinux is in ENFORCING MODE change to permissive
+#vi /etc/selinux/config
+SELINUX=permissive
+----save and quit
+
+FIREWALL MAKE SURE TO ALLOW WEB SERVER ACCESS THROUGH THE FIREWALL
+#firewall-cmd --permanent --add-service=http
+#firewall-cmd --reload
+
+
+#######################################
+#   INSTALLATION ON NAGIOS CLIENT     #
+#######################################
+
+
+INSTALL NRPE ADD-on & NAGIOS PLUGINS
+#rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+#yum install -y nrpe nagios-plugins-all
+
+CONFIGURE NRPE ADD-on
+#vi /etc/nagios/nrpe.cfg
+-Add the Nagios servers IP address, separated by comma like below.
+
+allowed_hosts=(nagios server ip address)
+
+CONFIGURE NAGIOS CHECKS
+#command[check_users]=/usr/lib64/nagios/plugins/check_users -w 5 -c 10
+#command[check_load]=/usr/lib64/nagios/plugins/check_load -w 15,10,5 -c 30,25,20
+#command[check_root]=/usr/lib64/nagios/plugins/check_disk -w 20% -c 10% -p /dev/mapper/centos-root
+#command[check_swap]=/usr/lib64/nagios/plugins/check_swap -w 20% -c 10%
+#command[check_total_procs]=/usr/lib64/nagios/plugins/check_procs -w 150 -c 200
+
+RESTART THE NRPE SERVICE
+#systemctl start nrpe
+#systemctl enable nrpe
+
+ON NAGIOS SERVER
+#rpm -ivh https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+
+INSTALL NRPE PLUGINS
+#yum -y install nagios-plugins-nrpe
+
+EDIT THE NAGIOS CONFIG FILE 
+#vi /usr/local/nagios/etc/nagios.cfg
+---->add or uncomment the following line
+#cfg_dir=/usr/local/nagios/etc/servers
+
+CREATE A CONFIGURATION DIRECTORY
+#mkdir /usr/local/nagios/etc/servers
+
+CONFIGURE NAGIOS SERVER
+#vi /usr/local/nagios/etc/objects/commands.cfg
+--->Add the following Nagios command definition to the file.
+
+# .check_nrpe. command definition
+define command{
+command_name check_nrpe
+command_line /usr/lib64/nagios/plugins/check_nrpe -H $HOSTADDRESS$ -t 30 -c $ARG1$
+}
+
+ADD A LINUX HOST TO NAGIOS SERVER
+#vi /usr/local/nagios/etc/servers/nagclient.cfg
+----->or jusy copy the (local.cfg) config file and edit the hostname to your hostname
+----> and then delete the ( define hostgroup { )
+
+
+define host{
+                           
+            use                     linux-server            
+            host_name              	nagclient            
+            alias                   nagclient          
+            address                 192.168.1.20   ----- nagios linux client IP ADDRESS
+                                    
+}                                   
+                                    
+define hostgroup{                   
+                                    
+            hostgroup_name          nagclient         
+            alias                   nagclient            
+            members                 client.itzgeek.local
+}                                   
+                                    
+define service{                     
+                                    
+            use                     local-service            
+            host_name               nagclient          
+            service_description     SWAP Uasge            
+            check_command           check_nrpe!check_swap                          
+                                    
+}                                   
+                                    
+define service{                     
+                                    
+            use                     local-service            
+            host_name               nagclient            
+            service_description     Root / Partition            
+            check_command           check_nrpe!check_root                          
+                                    
+}                                   
+                                    
+define service{                     
+                                    
+            use                     local-service            
+            host_name               nagclient            
+            service_description     Current Users            
+            check_command           check_nrpe!check_users                         
+                                    
+}                                   
+                                    
+define service{                     
+                                    
+            use                     local-service            
+            host_name              	nagclient         
+            service_description     Total Processes            
+            check_command           check_nrpe!check_total_procs                   
+                                    
+}                                   
+                                    
+define service{                     
+                                    
+            use                     local-service            
+            host_name               nagclient            
+            service_description     Current Load            
+            check_command           check_nrpe!check_load
+
+}
+
+VERIFY THE NAGIOS
+#/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg
+
+RESTART THE NAGIOS
+#systemctl restart nagios
+
+FIREWALL
+#firewall-cmd --permanent --add-port=5666/tcp
+#firewall-cmd --reload
+
+
+
+####################################
+#     ADDING WINDOWS AS A HOST     #
+####################################
+1. Download the NSCP or NSClient++
+2. INSTALL THE FILE
+3. go to services -> find the NSClient++ ---> click "Log on" 
+---> check the " Allow service to interact with desktop"
+4. CLICK APPLY AND NEXT CLICK  "OK"
+5. GO TO NAGIO SERVER
+6. copy the (windows.cfg) to the /usr/local/nagios/etc/objects
+7. edit(config) the  in /usr/local/nagios/etc/objects/windows.cfg
+8. in the define host{
+define host {
+
+    use                     windows-server          ; Inherit default values from a template
+    host_name               winserver               ; The name we're giving to this host
+    alias                   My Windows Server       ; A longer name associated with the host
+    address                 192.168.1.2             ; IP address of the host(windows ip add)
+}
+9. CHANGE ALL THE HOSTNAME INTO YOUR PREFERRED HOSTNAME OF WINDOWS SERVER
+
+10. NEXT IS TO ENABLE THE WINDOWS MACHINE FOR US TO SEE IT IN WEB INTERFACE
+- GO TO /usr/loca/nagios/etc/objects
+-CHECK THE cfg_file=/usr/local/nagios/etc/objects/nagwindows.cfg
+---->take note that if you change the windows.cfg to nagwindows.cfg or anything 
+----> you must also change that in /usr/local/nagios/etc
+----> vi nagios.cfg
+---->find the Definitions for monitoring a Windows machine
+
+-UNCOMMENT IT OR COPY THE COMMAND 
+
+11. VERIFY THE PROGRAM
+-/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg
+12. NEXT IS TO RESTART THE NAGIOS
+- service nagios restart
+
+
+#################################################################
+#PATH and COMMANDS WHERE YOU CAN FIND AND CHANGE ALL CONFIG FILE#
+#################################################################
+1. GO TO /usr/local/nagios/etc/objects
+- path where you can add/edit hosts to different client 
+
+2. GO TO (/usr/local/nagios/etc/objects) command.cfg 
+-command.cfg file that you can edit the password of the 
+windows server incase the password is incorrect.
+
+3. 1,$ s/localhost/nagclient/g
+- this string can change all the host name
+in /usr/local/nagios/etc/objects via (vim or vi)
+
+
+
+
+##############################################
+#	 WEB INTERFACE ISSUE'S	    	     #
+##############################################
+
+1. HTTP WARNING: HTTP/1.1 403 Forbidden - 5179 bytes in 0.001 second response time 
+
+-SOLUTION
+#touch /var/www/html/index.html
+#chmod 755 /var/www/html/index.html
+#systemctl restart httpd
+
+2. CRITICAL - Socket timeout 
+SOLUTION:
+
+-Check the nsclient in windows
+-C:/Program Files/NSClient++/nsclient
+-CHECK THE PASSWORD IF THE PASSWORD IS INCORRECT
+-GO TO THE NAGIOS SERVER
+-cd /usr/local/nagios/etc/objects
+-check the command.cfg
+
+
+3.  See "systemctl status nagios.service" and "journalctl -xe" for details.
+Failed to start Nagios Core 4.4.3.
+SOLUTION:
+
+- enable the windows.cfg or uncomment
+-Everytime you configure a windows host you must uncomment windows.cfg
+-this is very important, it is because if you don't do it, it will promt an error.
+4. Free disk space : Invalid drive 
+SOLUTION:
+
+-> Re-install the NSClient++
+->Go to services
+-> Allow Desktop...
+-> Restart nagios server
+
+5. CRITICAL - Socket timeout 
+SOLUTION:
+
+-> Re-install the NSClient++
+->Go to services
+-> Allow Desktop...
+-> Restart nagios server
+-> wait to the server to load the service, it takes time to wait. but you should wait to check 
+all the error if theres an error. For possible debugging or troubleshoot
+
+
+6.NSClient - ERROR: No performance data from command: check_cpu 
+SOLUTION:
+-> restart NSClient++
+
+7. Failed to open service W3SVC: 424
+SOLUTION:
+
+-> Go to windows host
+-> Run cmd as admin
+-> Type sfc /scannow
+---It takes time to scan
