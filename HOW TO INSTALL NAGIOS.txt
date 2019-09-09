@@ -1,4 +1,4 @@
-STEPS ON HOW TO INSTALL NAGIOS 4.4.3 on SERVER
+STEPS ON HOW TO INSTALL NAGIOS 4.4.3 on SERVER/ Centos7/RHEL7
 
 INSTALL THE PREREQUISITES
 #yum -y install httpd php gcc glibc glibc-common wget perl gd gd-devel unzip zip
